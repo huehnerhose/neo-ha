@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""PacketLogger-Trace (.pklg) -> ATT-Verkehr als Text.
+"""PacketLogger trace (.pklg) -> ATT traffic as text.
 
-Zeigt nur ATT-Pakete (L2CAP CID 0x0004), mit Zeit relativ zum Trace-Start.
-Handles der NEO-Steuerung: 0x25 = FFF1 (Adressen), 0x28 = FFF2 (Werte), 0x0F = CCCD Service Changed.
+Shows only ATT packets (L2CAP CID 0x0004), with time relative to the start of the trace.
+NEO controller handles: 0x25 = FFF1 (addresses), 0x28 = FFF2 (values), 0x0F = CCCD Service Changed.
 
-    python3 tools/pklg_dump.py captures/mein-trace.pklg
+    python3 tools/pklg_dump.py captures/my-trace.pklg
 """
 import struct
 import sys
@@ -55,9 +55,9 @@ def main(path):
             data = body[2:]
             line += f" {HANDLES.get(h, hex(h)):5} {data.hex(' ')}"
             if h == 0x25 and data:
-                line += f"   [Adressen: {regs(data)}]"
+                line += f"   [addresses: {regs(data)}]"
             elif h == 0x28 and data:
-                line += f"   [Wert: {vals(data)}]"
+                line += f"   [value: {vals(data)}]"
         elif op == 0x0B:
             line += f"       {body.hex(' ')}   [{vals(body)}]"
         else:

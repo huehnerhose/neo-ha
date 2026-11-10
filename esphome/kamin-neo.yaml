@@ -1,10 +1,16 @@
-# ESPHome: S-Thermatik NEO ("NEO basic") per BLE -> Home Assistant
-# Protokoll: Registeradressen (uint16 LE) nach FFF1 schreiben, ~1 s warten, FFF2 lesen (5x int16 LE)
-# UNGETESTET - erst das Lesen pruefen, dann die Steuerung einmal mit offener App gegenchecken.
+# ESPHome: S-Thermatik NEO ("NEO basic") via BLE -> Home Assistant
+# Protocol: write register addresses (uint16 LE) to FFF1, wait ~1 s, read FFF2 (5x int16 LE)
+# UNTESTED - verify reading first, then cross-check the controls once against the app.
+
+# Entity language: include ONE of the two files (English or German entity names).
+# Switching later renames the entities in Home Assistant.
+packages:
+  lang: !include lang/en.yaml
+  # lang: !include lang/de.yaml
 
 esphome:
   name: kamin-neo
-  friendly_name: Kamin
+  friendly_name: ${friendly_name}
 
 esp32:
   board: esp32dev
@@ -22,29 +28,29 @@ wifi:
 esp32_ble_tracker:
   scan_parameters:
     active: true
-  # Schritt 1: echte MAC der Steuerung finden (steht dann im ESPHome-Log)
+  # Step 1: find the controller's real MAC address (it then shows up in the ESPHome log)
   on_ble_advertise:
     - then:
         - lambda: |-
             if (x.get_name() == "NEO basic")
-              ESP_LOGI("neo", "NEO basic gefunden: %s", x.address_str().c_str());
+              ESP_LOGI("neo", "Found NEO basic: %s", x.address_str().c_str());
 
 ble_client:
-  - mac_address: "AA:BB:CC:DD:EE:FF"   # <- aus dem Log eintragen
+  - mac_address: "AA:BB:CC:DD:EE:FF"   # <- enter the address from the log
     id: neo
     on_connect:
       then:
-        - logger.log: "NEO verbunden"
+        - logger.log: "NEO connected"
     on_disconnect:
       then:
-        - logger.log: "NEO getrennt"
+        - logger.log: "NEO disconnected"
 
 globals:
   - id: block
     type: int
     initial_value: '0'
 
-# Rohes Lesen von FFF2, verteilt die Werte je nach aktuellem Block
+# Raw read of FFF2; distributes the values according to the current block
 sensor:
   - platform: ble_client
     type: characteristic
@@ -61,72 +67,72 @@ sensor:
       ESP_LOGD("neo", "Block %d: %d %d %d %d %d", id(block), v[0], v[1], v[2], v[3], v[4]);
       switch (id(block)) {
         case 0:  // 1CCE 1E62 1CD4 1EF2 1D98
-          if (v[0] != 1234) return NAN;   // Plausibilitaet: 0x1CCE ist immer 1234
-          id(luftschieber).publish_state(v[1]);
+          if (v[0] != 1234) return NAN;   // sanity check: 0x1CCE is always 1234
+          id(air_damper).publish_state(v[1]);
           id(phase).publish_state(v[2]);
           id(reg_1d98).publish_state(v[4]);
           break;
         case 1:  // 1E2A 1D4E 1E64 1CBE 1E82
-          id(heizleistung_ist).publish_state(v[3]);
+          id(heating_power).publish_state(v[3]);
           id(reg_1e82).publish_state(v[4]);
           break;
         case 2:  // 1EA2 1D96 1E8C 1DEC 1E7C
-          id(raumtemp).publish_state(v[0]);
-          id(abgas).publish_state(v[1]);
-          id(manuell).publish_state(v[3] == 1);
-          id(tuer).publish_state(v[4] == 1);
+          id(room_temp).publish_state(v[0]);
+          id(flue_gas_temp).publish_state(v[1]);
+          id(damper_manual).publish_state(v[3] == 1);
+          id(door).publish_state(v[4] == 1);
           break;
       }
       return v[0];
 
   - platform: template
-    id: abgas
-    name: "Abgastemperatur"
+    id: flue_gas_temp
+    name: "${name_flue_gas_temp}"
     unit_of_measurement: "°C"
     device_class: temperature
     state_class: measurement
   - platform: template
-    id: luftschieber
-    name: "Luftschieber"
+    id: air_damper
+    name: "${name_air_damper}"
     unit_of_measurement: "%"
     state_class: measurement
   - platform: template
-    id: heizleistung_ist
-    name: "Heizleistung"
+    id: heating_power
+    name: "${name_heating_power}"
     state_class: measurement
   - platform: template
-    id: raumtemp
-    name: "Raumtemperatur (?)"
+    id: room_temp
+    name: "${name_room_temp}"
     unit_of_measurement: "°C"
     device_class: temperature
     state_class: measurement
   - platform: template
     id: phase
-    name: "Phase (Rohwert)"
+    name: "${name_phase}"
   - platform: template
     id: reg_1e82
-    name: "Register 1E82"
+    name: "${name_reg_1e82}"
   - platform: template
     id: reg_1d98
-    name: "Register 1D98"
+    name: "${name_reg_1d98}"
 
 binary_sensor:
   - platform: template
-    id: manuell
-    name: "Luftschieber manuell"
+    id: damper_manual
+    name: "${name_damper_manual}"
   - platform: template
-    id: tuer
-    name: "Kamintür"
+    id: door
+    name: "${name_door}"
     device_class: door
 
-# Verbindung trennen, damit die Handy-App wieder rankommt (nur 1 Verbindung moeglich)
+# Turn off to disconnect so the phone app can connect again (only 1 connection possible)
 switch:
   - platform: ble_client
     ble_client_id: neo
-    name: "Kamin Bluetooth verbunden"
+    name: "${name_ble_connected}"
   - platform: template
-    name: "Luftschieber Automatik"
-    lambda: 'return !id(manuell).state;'
+    name: "${name_damper_auto}"
+    lambda: 'return !id(damper_manual).state;'
     turn_on_action:
       - script.execute:
           id: write_reg
@@ -144,7 +150,7 @@ interval:
       - script.execute: poll
 
 script:
-  # Register schreiben wie die App: FFF1 <- Adresse, FFF2 <- Wert (int16 LE)
+  # Write a register like the app does: FFF1 <- address, FFF2 <- value (int16 LE)
   - id: write_reg
     mode: queued
     parameters:
@@ -206,19 +212,19 @@ script:
       - delay: 700ms
       - globals.set: { id: block, value: '-1' }
 
-# ---------------- Steuerung ----------------
-# Aus PacketLogger-Traces:
-#   0x1CBE  Heizleistung 1..3
-#   0x1DEC  Luftschieber-Modus: 1 = manuell, 0 = Automatik
-#   0x1E62  Luftschieber in % (wird im Manuellbetrieb gesetzt)
+# ---------------- Controls ----------------
+# From PacketLogger traces:
+#   0x1CBE  heating power 1..3
+#   0x1DEC  air damper mode: 1 = manual, 0 = automatic
+#   0x1E62  air damper in % (set in manual mode)
 
 number:
   - platform: template
-    name: "Heizleistung einstellen"
+    name: "${name_set_heating_power}"
     min_value: 1
     max_value: 3
     step: 1
-    lambda: 'return id(heizleistung_ist).state;'
+    lambda: 'return id(heating_power).state;'
     set_action:
       - script.execute:
           id: write_reg
@@ -226,15 +232,15 @@ number:
           val: !lambda 'return (int) x;'
 
   - platform: template
-    name: "Luftschieber manuell setzen"
+    name: "${name_set_damper_manual}"
     unit_of_measurement: "%"
     min_value: 0
     max_value: 100
     step: 1
     mode: slider
-    lambda: 'return id(luftschieber).state;'
+    lambda: 'return id(air_damper).state;'
     set_action:
-      # wie die App: erst Manuellbetrieb an, dann Wert
+      # like the app: enable manual mode first, then set the value
       - script.execute:
           id: write_reg
           addr: 0x1DEC
