@@ -1,0 +1,16 @@
+# English entity names. Selected in kamin-neo.yaml under `packages:`.
+substitutions:
+  friendly_name: "Fireplace"
+  name_flue_gas_temp: "Flue gas temperature"
+  name_air_damper: "Air damper"
+  name_heating_power: "Heating power"
+  name_room_temp: "Room temperature (?)"
+  name_phase: "Phase (raw value)"
+  name_reg_1e82: "Register 1E82"
+  name_reg_1d98: "Register 1D98"
+  name_damper_manual: "Air damper manual"
+  name_door: "Fireplace door"
+  name_ble_connected: "Fireplace Bluetooth connected"
+  name_damper_auto: "Air damper automatic"
+  name_set_heating_power: "Set heating power"
+  name_set_damper_manual: "Set air damper manually"

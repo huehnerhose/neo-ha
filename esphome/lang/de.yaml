@@ -1,0 +1,16 @@
+# German entity names (Deutsche Entitätsnamen). Selected in kamin-neo.yaml under `packages:`.
+substitutions:
+  friendly_name: "Kamin"
+  name_flue_gas_temp: "Abgastemperatur"
+  name_air_damper: "Luftschieber"
+  name_heating_power: "Heizleistung"
+  name_room_temp: "Raumtemperatur (?)"
+  name_phase: "Phase (Rohwert)"
+  name_reg_1e82: "Register 1E82"
+  name_reg_1d98: "Register 1D98"
+  name_damper_manual: "Luftschieber manuell"
+  name_door: "Kamintür"
+  name_ble_connected: "Kamin Bluetooth verbunden"
+  name_damper_auto: "Luftschieber Automatik"
+  name_set_heating_power: "Heizleistung einstellen"
+  name_set_damper_manual: "Luftschieber manuell setzen"
