@@ -32,8 +32,10 @@ esp32_ble_tracker:
   on_ble_advertise:
     - then:
         - lambda: |-
-            if (x.get_name() == "NEO basic")
-              ESP_LOGI("neo", "Found NEO basic: %s", x.address_str().c_str());
+            if (x.get_name() == "NEO basic") {
+              char mac[esphome::MAC_ADDRESS_PRETTY_BUFFER_SIZE];
+              ESP_LOGI("neo", "Found NEO basic: %s", x.address_str_to(mac));
+            }
 
 ble_client:
   - mac_address: "AA:BB:CC:DD:EE:FF"   # <- enter the address from the log
@@ -147,7 +149,7 @@ switch:
 interval:
   - interval: 15s
     then:
-      - script.execute: poll
+      - script.execute: poll_stove
 
 script:
   # Write a register like the app does: FFF1 <- address, FFF2 <- value (int16 LE)
@@ -157,7 +159,7 @@ script:
       addr: int
       val: int
     then:
-      - script.wait: poll
+      - script.wait: poll_stove
       - ble_client.ble_write:
           id: neo
           service_uuid: 'fff0'
@@ -177,7 +179,7 @@ script:
           args: [ 'addr', 'val' ]
       - delay: 500ms
 
-  - id: poll
+  - id: poll_stove
     mode: single
     then:
       - script.wait: write_reg
