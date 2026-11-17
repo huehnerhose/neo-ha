@@ -35,6 +35,9 @@ wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
 
+esp32_ble:
+  io_capability: none   # "Just Works" pairing, no PIN
+
 esp32_ble_tracker:
   scan_parameters:
     active: true
@@ -64,7 +67,13 @@ ble_client:
     id: neo
     on_connect:
       then:
-        - logger.log: "NEO connected"
+        - logger.log: "NEO connected, requesting encryption"
+        # FFF1/FFF2 reject reads on an unencrypted link (GATT status 5 = insufficient
+        # authentication). Phones/Macs pair transparently on that error, ESPHome doesn't,
+        # so start "Just Works" pairing ourselves (no PIN, esp32_ble io_capability: none).
+        - lambda: |-
+            esp_err_t err = id(neo).pair();
+            if (err != ESP_OK) ESP_LOGW("neo", "pair() failed: %d", err);
     on_disconnect:
       then:
         - logger.log: "NEO disconnected"
@@ -171,10 +180,10 @@ switch:
 interval:
   - interval: 15s
     then:
-      # Only poll while connected (otherwise every write just logs "not connected")
+      # Only poll while connected and encrypted (otherwise reads fail)
       - if:
           condition:
-            lambda: 'return id(neo).connected();'
+            lambda: 'return id(neo).connected() && id(neo).is_paired();'
           then:
             - script.execute: poll_stove
 

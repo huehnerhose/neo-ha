@@ -3,7 +3,7 @@
 Integrate the S-Thermatik NEO fireplace controller ("NEO basic", Bluetooth LE) into Home Assistant.
 
 The protocol is documented in [PROTOCOL.md](PROTOCOL.md): a simple register protocol over
-the characteristics FFF1 (addresses) and FFF2 (values), with no pairing or encryption.
+the characteristics FFF1 (addresses) and FFF2 (values). No PIN, but the link must be encrypted ("Just Works" pairing).
 
 ## Contents
 
