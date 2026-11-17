@@ -4,6 +4,11 @@
 
 # Entity language: include ONE of the two files (English or German entity names).
 # Switching later renames the entities in Home Assistant.
+# The stove's BLE MAC address. The ESP32 only connects if this matches EXACTLY
+# what "Found NEO basic: ..." prints in the log.
+substitutions:
+  neo_mac: "90:48:46:65:6D:7A"
+
 packages:
   lang: !include lang/en.yaml
   # lang: !include lang/de.yaml
@@ -18,6 +23,11 @@ esp32:
     type: esp-idf
 
 logger:
+  level: DEBUG
+  logs:
+    # Shows "Found device" / "Connecting" / disconnect reasons while setting up.
+    esp32_ble_client: DEBUG
+    ble_client: DEBUG
 api:
 ota:
   - platform: esphome
@@ -29,16 +39,28 @@ esp32_ble_tracker:
   scan_parameters:
     active: true
   # Step 1: find the controller's real MAC address (it then shows up in the ESPHome log)
+  # Logs a warning if the stove is seen but ble_client is configured with another MAC
+  # (then it never tries to connect). Logged at most once a minute.
   on_ble_advertise:
     - then:
         - lambda: |-
-            if (x.get_name() == "NEO basic") {
-              char mac[esphome::MAC_ADDRESS_PRETTY_BUFFER_SIZE];
-              ESP_LOGI("neo", "Found NEO basic: %s", x.address_str_to(mac));
+            if (x.get_name() != "NEO basic") return;
+            static uint32_t last_log = 0;
+            uint32_t now = millis();
+            if (last_log != 0 && now - last_log < 60000) return;
+            last_log = now;
+            char mac[esphome::MAC_ADDRESS_PRETTY_BUFFER_SIZE];
+            x.address_str_to(mac);
+            if (x.address_uint64() == id(neo).get_address()) {
+              ESP_LOGI("neo", "Found NEO basic: %s (matches ble_client, connected: %s)", mac,
+                       YESNO(id(neo).connected()));
+            } else {
+              ESP_LOGW("neo", "Found NEO basic: %s, but ble_client mac_address is different -> "
+                       "set neo_mac to this address", mac);
             }
 
 ble_client:
-  - mac_address: "AA:BB:CC:DD:EE:FF"   # <- enter the address from the log
+  - mac_address: ${neo_mac}
     id: neo
     on_connect:
       then:
@@ -149,7 +171,12 @@ switch:
 interval:
   - interval: 15s
     then:
-      - script.execute: poll_stove
+      # Only poll while connected (otherwise every write just logs "not connected")
+      - if:
+          condition:
+            lambda: 'return id(neo).connected();'
+          then:
+            - script.execute: poll_stove
 
 script:
   # Write a register like the app does: FFF1 <- address, FFF2 <- value (int16 LE)

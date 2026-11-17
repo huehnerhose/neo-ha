@@ -21,7 +21,9 @@ the characteristics FFF1 (addresses) and FFF2 (values), with no pairing or encry
 2. Pick the entity language in `kamin-neo.yaml` (see below).
 3. Flash `kamin-neo.yaml` to an ESP32 (not an ESP8266 – it has no Bluetooth).
 4. Close the phone app and look for `Found NEO basic: XX:XX:…` in the ESPHome log.
-5. Enter the MAC under `ble_client → mac_address` and flash again.
+5. Set `neo_mac` under `substitutions:` to exactly that address and flash again.
+   If the address doesn't match, the ESP32 keeps scanning and never connects; the log then
+   warns `... ble_client mac_address is different`. On success you see `NEO connected`.
 6. Add the device in Home Assistant via the ESPHome integration.
 
 ### Entity language
