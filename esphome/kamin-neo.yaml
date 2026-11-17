@@ -35,8 +35,11 @@ wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
 
+# The stove pairs with a fixed PIN (passkey) 000000, like in the app.
+# The ESP32 acts as a "keyboard" and answers the passkey request below.
 esp32_ble:
-  io_capability: none   # "Just Works" pairing, no PIN
+  io_capability: keyboard_only
+  auth_req_mode: bond_mitm
 
 esp32_ble_tracker:
   scan_parameters:
@@ -69,11 +72,22 @@ ble_client:
       then:
         - logger.log: "NEO connected, requesting encryption"
         # FFF1/FFF2 reject reads on an unencrypted link (GATT status 5 = insufficient
-        # authentication). Phones/Macs pair transparently on that error, ESPHome doesn't,
-        # so start "Just Works" pairing ourselves (no PIN, esp32_ble io_capability: none).
+        # authentication). Phones/Macs start pairing on that error, ESPHome doesn't,
+        # so start it ourselves. Once bonded, later connects just re-encrypt.
         - lambda: |-
             esp_err_t err = id(neo).pair();
             if (err != ESP_OK) ESP_LOGW("neo", "pair() failed: %d", err);
+    on_passkey_request:
+      then:
+        - logger.log: "NEO asks for PIN, sending 000000"
+        - ble_client.passkey_reply:
+            id: neo
+            passkey: 0
+    on_numeric_comparison_request:
+      then:
+        - ble_client.numeric_comparison_reply:
+            id: neo
+            accept: true
     on_disconnect:
       then:
         - logger.log: "NEO disconnected"
