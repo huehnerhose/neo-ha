@@ -4,6 +4,11 @@
 
 # Entity language: include ONE of the two files (English or German entity names).
 # Switching later renames the entities in Home Assistant.
+# The stove's BLE MAC address. The ESP32 only connects if this matches EXACTLY
+# what "Found NEO basic: ..." prints in the log.
+substitutions:
+  neo_mac: "90:48:46:65:6D:7A"
+
 packages:
   lang: !include lang/en.yaml
   # lang: !include lang/de.yaml
@@ -18,6 +23,11 @@ esp32:
     type: esp-idf
 
 logger:
+  level: DEBUG
+  logs:
+    # Shows "Found device" / "Connecting" / disconnect reasons while setting up.
+    esp32_ble_client: DEBUG
+    ble_client: DEBUG
 api:
 ota:
   - platform: esphome
@@ -25,24 +35,59 @@ wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
 
+# The stove pairs with a fixed PIN (passkey) 000000, like in the app.
+# The ESP32 acts as a "keyboard" and answers the passkey request below.
+esp32_ble:
+  io_capability: keyboard_only
+  auth_req_mode: bond_mitm
+
 esp32_ble_tracker:
   scan_parameters:
     active: true
   # Step 1: find the controller's real MAC address (it then shows up in the ESPHome log)
+  # Logs a warning if the stove is seen but ble_client is configured with another MAC
+  # (then it never tries to connect). Logged at most once a minute.
   on_ble_advertise:
     - then:
         - lambda: |-
-            if (x.get_name() == "NEO basic") {
-              char mac[esphome::MAC_ADDRESS_PRETTY_BUFFER_SIZE];
-              ESP_LOGI("neo", "Found NEO basic: %s", x.address_str_to(mac));
+            if (x.get_name() != "NEO basic") return;
+            static uint32_t last_log = 0;
+            uint32_t now = millis();
+            if (last_log != 0 && now - last_log < 60000) return;
+            last_log = now;
+            char mac[esphome::MAC_ADDRESS_PRETTY_BUFFER_SIZE];
+            x.address_str_to(mac);
+            if (x.address_uint64() == id(neo).get_address()) {
+              ESP_LOGI("neo", "Found NEO basic: %s (matches ble_client, connected: %s)", mac,
+                       YESNO(id(neo).connected()));
+            } else {
+              ESP_LOGW("neo", "Found NEO basic: %s, but ble_client mac_address is different -> "
+                       "set neo_mac to this address", mac);
             }
 
 ble_client:
-  - mac_address: "AA:BB:CC:DD:EE:FF"   # <- enter the address from the log
+  - mac_address: ${neo_mac}
     id: neo
     on_connect:
       then:
-        - logger.log: "NEO connected"
+        - logger.log: "NEO connected, requesting encryption"
+        # FFF1/FFF2 reject reads on an unencrypted link (GATT status 5 = insufficient
+        # authentication). Phones/Macs start pairing on that error, ESPHome doesn't,
+        # so start it ourselves. Once bonded, later connects just re-encrypt.
+        - lambda: |-
+            esp_err_t err = id(neo).pair();
+            if (err != ESP_OK) ESP_LOGW("neo", "pair() failed: %d", err);
+    on_passkey_request:
+      then:
+        - logger.log: "NEO asks for PIN, sending 000000"
+        - ble_client.passkey_reply:
+            id: neo
+            passkey: 0
+    on_numeric_comparison_request:
+      then:
+        - ble_client.numeric_comparison_reply:
+            id: neo
+            accept: true
     on_disconnect:
       then:
         - logger.log: "NEO disconnected"
@@ -149,7 +194,12 @@ switch:
 interval:
   - interval: 15s
     then:
-      - script.execute: poll_stove
+      # Only poll while connected and encrypted (otherwise reads fail)
+      - if:
+          condition:
+            lambda: 'return id(neo).connected() && id(neo).is_paired();'
+          then:
+            - script.execute: poll_stove
 
 script:
   # Write a register like the app does: FFF1 <- address, FFF2 <- value (int16 LE)

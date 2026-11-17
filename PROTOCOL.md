@@ -10,7 +10,7 @@ Reverse engineered from PacketLogger captures of the S-Thermatik NEO app (iOS ap
 | Manufacturer (DIS) | ATech elektronika |
 | BLE chip | Texas Instruments CC254x running TI's "SimpleBLEPeripheral" sample firmware (PnP vendor 0x000D, placeholder strings in the DIS) |
 | Connections | only **one** at a time – the app and the ESP32/script lock each other out |
-| Security | no pairing, no encryption |
+| Security | FFF1/FFF2 need an encrypted link: pairing with fixed passkey **000000** (the app asks for it once) |
 
 ## GATT
 
